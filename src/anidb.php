@@ -1,6 +1,7 @@
 <?php
 
 require_once('kiss.php');
+require_once('common.php');
 
 /**
 * Class for redirecting anidb links to kissanime.
@@ -106,6 +107,12 @@ class AniDBApplication {
 			return;
 		}
 		
+		$contents = gzdecode($contents);
+		
+		if ($contents == false) {
+			return;
+		}
+		
 		$this->connection->beginTransaction();
 		
 		try {
@@ -132,7 +139,15 @@ class AniDBApplication {
 					continue;
 				
 				$l = $title[2];
-				$t = $type[intval($title[1])];
+				$t = 'synonym';
+				if (!array_key_exists(intval($title[1]), $type)){
+					echo "$line\r\n";
+					print_r($title);
+				}
+				else {
+					$t = $type[intval($title[1])];
+				}
+				
 				$v = trim($title[3]);
 				$i = intval($title[0]);
 				
@@ -356,7 +371,7 @@ class AniDBApplication {
 	*/
 	public static function run() {
 		$anidb = new AniDBApplication();
-		//$anidb->tryUpdateTitles();	
+		$anidb->tryUpdateTitles();	
 		
 		if (!isset($_GET['anime_id']) || !isset($_GET['episode_num']) || !isset($_GET['resolution'])) {
 			http_statuscode(400);
