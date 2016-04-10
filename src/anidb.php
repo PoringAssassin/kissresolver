@@ -169,8 +169,9 @@ class AniDBApplication {
 	*/
 	public function getVideoUrl($anime_id, $episode_num, $resolution) {
 		$handle = $this->connection->prepare(
-			'SELECT value FROM urlcache '.
-			'WHERE anime_id = ? AND episode_num = ? AND resolution IS NOT NULL AND DATE_ADD(last_updated, INTERVAL 7 DAY) >= NOW()'
+			'SELECT value, resolution FROM urlcache ' .
+			'WHERE anime_id = ? AND episode_num = ? AND resolution > -1 AND DATE_ADD(last_updated, INTERVAL 7 DAY) >= NOW() ' .
+			'ORDER BY resolution DESC'
 		);
 		
 		$handle->bindValue(1, $anime_id);
@@ -178,52 +179,76 @@ class AniDBApplication {
 		$handle->execute();
 		
 		$result = $handle->fetchAll(\PDO::FETCH_OBJ);
+		$count = count($result);
 		
-		if (count($result) >= 1) {
-			return $result[0]->value;
-		}
-		
-		$handle = $this->connection->prepare(
-			'SELECT value FROM urlcache '.
-			'WHERE anime_id = ? AND episode_num = ? AND resolution IS NULL'
-		);
-		
-		$handle->bindValue(1, $anime_id);
-		$handle->bindValue(2, $episode_num);
-		$handle->execute();
-		
-		$result = $handle->fetchAll(\PDO::FETCH_OBJ);
-		if (count($result) >= 1) {
-			// Load url => get video urls
-		}
-		
-		$handle = $this->connection->prepare(
-			'SELECT value FROM urlcache '.
-			'WHERE anime_id = ? AND episode_num IS NULL AND resolution IS NULL'
-		);
-		
-		$handle->bindValue(1, $anime_id);
-		$handle->execute();
-		
-		$result = $handle->fetchAll(\PDO::FETCH_OBJ);
-		if (count($result) >= 1) {
-			// Load url => get episode urls => get video urls
-		}
-		else {
-			$animeurl = $this->getAnimeUrl($anime_id);
-			
-			if ($animeurl == null) {
-				return null;
+		if ($count >= 1) {
+			for ($i = 0; $i < $count; $i++) {
+				if ($result[$i]->resolution <= $resolution) {
+					return $result[$i]->value;
+				}
 			}
 			
-			die ($animeurl);
-			// TODO: save url
-			
-			// Search for title => load url => get episode urls => get video urls
+			return $result[$count - 1]->value;
+		}
+		
+		$handle = $this->connection->prepare(
+			'SELECT value FROM urlcache '.
+			'WHERE anime_id = ? AND episode_num = ? AND resolution = -1'
+		);
+		
+		$handle->bindValue(1, $anime_id);
+		$handle->bindValue(2, $episode_num);
+		$handle->execute();
+		
+		$result = $handle->fetchAll(\PDO::FETCH_OBJ);
+		if (count($result) >= 1) {
+			return $this->getVideoFromEpisodePage($result[0]->value, $anime_id, $episode_num, $resolution);
+		}
+		
+		$handle = $this->connection->prepare(
+			'SELECT value FROM urlcache '.
+			'WHERE anime_id = ? AND episode_num -1 AND resolution = -1'
+		);
+		
+		$handle->bindValue(1, $anime_id);
+		$handle->execute();
+		
+		$result = $handle->fetchAll(\PDO::FETCH_OBJ);
+		if (count($result) >= 1) {
+			return $this->getVideoUrlFromAnimePage($result[0]->value, $anime_id, $episode_num, $resolution);
+		}
+		else {
+			return $this->getVideoUrlFromSearch($anime_id, $episode_num, $resolution);
 		}
 	}
 	
-	private function getAnimeUrl($anime_id) {
+	/**
+	* Puts an url in the database cache.
+	*
+	* @param $value The url to cache.
+	* @param $anime_id The anime associated with the video url.
+	* @param $episode_num The episode number associated with the video url.
+	* @param $resolution The resolution associated with the video url.
+	*/
+	private function cacheUrl($value, $anime_id, $episode_num, $resolution) {
+		$handle = $this->connection->prepare('REPLACE INTO urlcache (anime_id, episode_num, resolution, value, last_updated) VALUES(?, ?, ?, ?, NOW())');
+
+		$handle->bindValue(1, $anime_id, PDO::PARAM_INT);
+		$handle->bindValue(2, $episode_num == null ? -1 : $episode_num, PDO::PARAM_INT);
+		$handle->bindValue(3, $resolution == null ? -1 : $resolution, PDO::PARAM_INT);
+		$handle->bindValue(4, $value);
+		
+		$handle->execute();
+	}
+	
+	/**
+	* Gets the video url from kissanime's search page.
+	*
+	* @param $anime_id The AniDB anime ID of the requested anime.
+	* @param $episode_num The number of the requested episode.
+	* @param $resolution The requested resolution. Gets the highest available.
+	*/
+	private function getVideoUrlFromSearch($anime_id, $episode_num, $resolution) {
 		$handle = $this->connection->prepare(
 			'SELECT value FROM title '.
 			"WHERE anime_id = ? AND type = 'primary' LIMIT 1"
@@ -246,7 +271,84 @@ class AniDBApplication {
 			return null;	
 		}
 		
-		return $matches['url'];
+		$this->cacheUrl($matches['url'], $anime_id, null, null);
+		
+		return $this->getVideoUrlFromAnimePage($matches['url'], $anime_id, $episode_num, $resolution);
+	}
+	
+	/**
+	* Gets the video url based on the (cached) url of an kiss anime page.
+	*
+	* @param $url The url (relative or absolute) of the anime page.
+	* @param $anime_id The AniDB anime ID of the requested anime.
+	* @param $episode_num The number of the requested episode.
+	* @param $resolution The requested resolution. Gets the highest available.
+	*/
+	private function getVideoUrlFromAnimePage($url, $anime_id, $episode_num, $resolution) {
+		$response = KissAnime::call($this, $url);
+		
+		if (!preg_match_all('#<a +href="(?<path>[^"]+)"[^>]*>[^<]+Episode (?<number>[0-9]+)\s*</a>\s*</td>\s*<td>\s*(?<month>[0-9]+)/(?<day>[0-9]+)/(?<year>[0-9]+)#si', $response, $matches)) {
+			return null;	
+		}
+		
+		$episode_path = null;
+		
+		for ($i = 0; $i < count($matches[0]); $i++) {
+			$currentnum = intval($matches['number'][$i]);
+			$path = $matches['path'][$i];
+			$this->cacheUrl($path, $anime_id, $currentnum, null);
+			
+			if ($currentnum == $episode_num) {
+				$episode_path = $path;
+			}
+		}
+		
+		if ($episode_path == null) {
+			return null;
+		}
+		
+		return $this->getVideoFromEpisodePage($episode_path, $anime_id, $episode_num, $resolution);
+	}
+	
+	/**
+	* Gets the video url based on the (cached) url of an kiss episode page.
+	*
+	* @param $url The url (relative or absolute) of the episode page.
+	* @param $anime_id The AniDB anime ID of the requested anime.
+	* @param $episode_num The number of the requested episode.
+	* @param $resolution The requested resolution. Gets the highest available.
+	*/
+	private function getVideoFromEpisodePage($url, $anime_id, $episode_num, $resolution) {
+		$response = KissAnime::call($this, $url);
+		
+		if (!preg_match_all('#<option value="(?<url>[a-z|0-9|=|/]+)"[^>]*>(?<quality>[0-9]+)p</option>#si', $response, $matches)) {
+			return null;	
+		}
+		
+		$resolutions = array();
+		
+		for ($i = 0; $i < count($matches[0]); $i++) {
+			$currentres = intval($matches['quality'][$i]);
+			$currenturl = base64_decode($matches['url'][$i]);
+			
+			$this->cacheUrl($currenturl, $anime_id, $episode_num, $currentres);
+			
+			$resolutions[$currentres] = $currenturl;
+		}
+		
+		if (array_key_exists($resolution, $resolutions)) {
+			return $resolutions[$resolution];
+		}
+		else {
+			krsort($resolutions, SORT_NUMERIC);
+			foreach ($resolutions as $res => $vidurl) {
+				if ($res <= $resolution) {
+					return $vidurl;
+				}
+			}
+			
+			return end($resolutions);
+		}
 	}
 	
 	/**
@@ -254,17 +356,20 @@ class AniDBApplication {
 	*/
 	public static function run() {
 		$anidb = new AniDBApplication();
-		//$anidb->tryUpdateTitles();
-		
-		//KissAnime::call($anidb, '/');
+		//$anidb->tryUpdateTitles();	
 		
 		if (!isset($_GET['anime_id']) || !isset($_GET['episode_num']) || !isset($_GET['resolution'])) {
-			die ('you dun derped');
-			// TODO: 404? invalid operation?
+			http_statuscode(400);
 			return;
 		}
 		
-		echo $anidb->getVideoUrl(intval($_GET['anime_id']), intval($_GET['episode_num']), $_GET['resolution']);
+		$url = $anidb->getVideoUrl(intval($_GET['anime_id']), intval($_GET['episode_num']), intval($_GET['resolution']));
+		if ($url == null) {
+			http_statuscode(404);
+			return;
+		}
+		
+		header('location: ' . $url);
 	}
 }
 

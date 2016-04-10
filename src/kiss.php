@@ -14,8 +14,6 @@ class KissAnime {
 	
 	public static function call($anidb, $path, $method = "GET", $formdata = null) {
 		$url = startsWith($path, self::BASEURL) ? $path : self::BASEURL . ltrim($path, '/');
-		
-		echo 'called with cookie: ' . self::getCookie($anidb) . "\r\n";
 		$response = null;
 		
 		if ($method == 'POST' && $formdata != null) {	
@@ -26,7 +24,6 @@ class KissAnime {
 					->followRedirects(false)
 					->body(http_build_query($formdata))
 					->send();
-			print_r($response);
 		}
 		else {
 			$response = \Httpful\Request::get($url)->withCookie(self::getCookie($anidb))->followRedirects(false)->expectsHtml()->send();
@@ -56,22 +53,6 @@ class KissAnime {
 		else {
 			return $response->raw_body;
 		}
-	
-	/*
-		if (formdata != null && formdata.Count > 0)
-		{
-			byte[] data = Encoding.UTF8.GetBytes(string.Join("&", formdata.Select(kvp => string.Format(
-				"{0}={1}",
-				Uri.EscapeUriString(kvp.Key),
-				Uri.EscapeDataString(kvp.Value.ToString())
-			))));
-			req.ContentType = "application/x-www-form-urlencoded";
-			req.ContentLength = data.Length;
-			using (Stream requestStream = req.GetRequestStream())
-			{
-				requestStream.Write(data, 0, data.Length);
-			}
-		}*/
 	}
 	
 	public static function setCookie($anidb, $setCookie) {
