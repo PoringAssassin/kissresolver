@@ -1,0 +1,6 @@
+<?php
+
+require_once('kissresolver.phar');
+AniDBApplication::run('localhost', 'db', 'username', 'password');
+
+?>

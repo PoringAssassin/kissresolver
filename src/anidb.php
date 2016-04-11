@@ -16,12 +16,12 @@ class AniDBApplication {
 	/** The PDO connection link */
 	private $connection;
 
-	function __construct() {
+	function __construct($host, $db, $user, $pass) {
 		try {
 			$this->connection = new \PDO(
-				'mysql:host=localhost;dbname=anidb;charset=utf8',
-				'username',
-				'password',
+				'mysql:host=' . $host . ';dbname=' . $db . ';charset=utf8',
+				$user,
+				$pass,
 				array(
 					\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
 					\PDO::ATTR_PERSISTENT => false
@@ -180,12 +180,12 @@ class AniDBApplication {
 	* 
 	* @param $anime_id The AniDB ID of the requested anime.
 	* @param $episode_num The episode number.
-	* @param $resolution The resolution as string to get the video url in, for example: 1080p or 720p.
+	* @param $resolution The resolution as string to get the video url in, for example: 1080 or 720.
 	*/
 	public function getVideoUrl($anime_id, $episode_num, $resolution) {
 		$handle = $this->connection->prepare(
 			'SELECT value, resolution FROM urlcache ' .
-			'WHERE anime_id = ? AND episode_num = ? AND resolution > -1 AND DATE_ADD(last_updated, INTERVAL 7 DAY) >= NOW() ' .
+			'WHERE anime_id = ? AND episode_num = ? AND resolution > -1 AND DATE_ADD(last_updated, INTERVAL 1 HOUR) >= NOW() ' .
 			'ORDER BY resolution DESC'
 		);
 		
@@ -374,13 +374,13 @@ class AniDBApplication {
 		$anidb->tryUpdateTitles();	
 		
 		if (!isset($_GET['anime_id']) || !isset($_GET['episode_num']) || !isset($_GET['resolution'])) {
-			http_statuscode(400);
+			http_response_code(400);
 			return;
 		}
 		
 		$url = $anidb->getVideoUrl(intval($_GET['anime_id']), intval($_GET['episode_num']), intval($_GET['resolution']));
 		if ($url == null) {
-			http_statuscode(404);
+			http_response_code(404);
 			return;
 		}
 		
