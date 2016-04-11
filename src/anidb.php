@@ -369,8 +369,8 @@ class AniDBApplication {
 	/**
 	* Runs the application to return a video url.
 	*/
-	public static function run() {
-		$anidb = new AniDBApplication();
+	public static function run($host, $db, $user, $pass) {
+		$anidb = new AniDBApplication($host, $db, $user, $pass);
 		$anidb->tryUpdateTitles();	
 		
 		if (!isset($_GET['anime_id']) || !isset($_GET['episode_num']) || !isset($_GET['resolution'])) {
