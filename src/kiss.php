@@ -8,10 +8,20 @@ require_once('kisschallenge.php');
 * Class to scrape data from kissanime.to.
 */
 class KissAnime {
+	/** KissAnime's base url. */
 	const BASEURL = "https://kissanime.to/";
 	
+	/** Cookie container array. */
 	protected static $cookies = null;
 	
+	/**
+	* Executes a call to kissanime.
+	* 
+	* @param $anidb The calling AniDBApplication.
+	* @param $path The path to call.
+	* @param $method Optional http method, default is 'GET'.
+	* @param $formdata Optional http post formdata.
+	*/
 	public static function call($anidb, $path, $method = "GET", $formdata = null) {
 		$url = startsWith($path, self::BASEURL) ? $path : self::BASEURL . ltrim($path, '/');
 		$response = null;
@@ -55,6 +65,12 @@ class KissAnime {
 		}
 	}
 	
+	/**
+	* Combines and saves a received cookie into the database.
+	* 
+	* @param $anidb The calling AniDBApplication.
+	* @param $setCookie The 'set-cookie' header received from the server.
+	*/
 	public static function setCookie($anidb, $setCookie) {
 		$tmp = self::getCookie($anidb); // init da cookies.
 	
@@ -68,6 +84,11 @@ class KissAnime {
 		$anidb->setConfig('kisscookie', self::getCookie($anidb));
 	}
 	
+	/**
+	* Gets the cookie string header value.
+	* 
+	* @param $anidb The calling AniDBApplication.
+	*/
 	public static function getCookie($anidb) {
 		if (self::$cookies == null) {
 			$kisscookie = $anidb->getConfig('kisscookie');

@@ -11,7 +11,7 @@ class AniDBApplication {
 	const TITLE_URL_DEFAULT = 'http://anidb.net/api/anime-titles.dat.gz';
 	
 	/** The default php script timeout in seconds */
-	const TIMEOUT_LIMIT = 100;
+	const TIMEOUT_LIMIT = 200;
 
 	/** The PDO connection link */
 	private $connection;
@@ -141,8 +141,7 @@ class AniDBApplication {
 				$l = $title[2];
 				$t = 'synonym';
 				if (!array_key_exists(intval($title[1]), $type)){
-					echo "$line\r\n";
-					print_r($title);
+					die('Unable to find type ' . title[1]);
 				}
 				else {
 					$t = $type[intval($title[1])];
@@ -172,6 +171,30 @@ class AniDBApplication {
 		catch (\PDOException $ex) {
 			$this->connection->rollBack();
 			print($ex);
+		}
+	}
+	
+	/**
+	* Gets the AniDB ID of the specified anime title.
+	* 
+	* @param $title The title to search for.
+	*/
+	public function getAnimeIDFromTitle($title) {
+		$handle = $this->connection->prepare(
+			'SELECT anime_id FROM title '.
+			"WHERE value LIKE CONCAT('%', ?, '%')"
+		);
+		
+		$handle->bindValue(1, $title);
+		$handle->execute();
+		
+		$result = $handle->fetchAll(\PDO::FETCH_OBJ);
+		$count = count($result);
+		if ($count == 0) {
+			return null;
+		}
+		else {
+			return intval($result[0]->anime_id);
 		}
 	}
 	
@@ -368,17 +391,29 @@ class AniDBApplication {
 	
 	/**
 	* Runs the application to return a video url.
+	* 
+	* @param $host The database server host.
+	* @param $db The database name.
+	* @param $user The username for the database.
+	* @param $pass The password for the database.
 	*/
 	public static function run($host, $db, $user, $pass) {
 		$anidb = new AniDBApplication($host, $db, $user, $pass);
-		$anidb->tryUpdateTitles();	
+		$anidb->tryUpdateTitles();
 		
-		if (!isset($_GET['anime_id']) || !isset($_GET['episode_num']) || !isset($_GET['resolution'])) {
+		if ((!isset($_GET['anime_id']) && !isset($_GET['title'])) || !isset($_GET['episode_num']) || !isset($_GET['resolution'])) {
 			http_response_code(400);
 			return;
 		}
 		
-		$url = $anidb->getVideoUrl(intval($_GET['anime_id']), intval($_GET['episode_num']), intval($_GET['resolution']));
+		$animeid = isset($_GET['anime_id']) ? intval($_GET['anime_id']) : $anidb->getAnimeIDFromTitle($_GET['title']);
+		
+		if ($animeid == null) {
+			http_response_code(404);
+			return;
+		}
+		
+		$url = $anidb->getVideoUrl($animeid, intval($_GET['episode_num']), intval($_GET['resolution']));
 		if ($url == null) {
 			http_response_code(404);
 			return;

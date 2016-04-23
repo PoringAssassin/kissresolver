@@ -3,16 +3,18 @@
 require_once('common.php');
 
 /**
+* Helper class for kissanime's obfuscated javascript challenge.
 */
 class JSFuck
 {
+	/** The default javascript to number replaces */
 	const VALUES = array('!![]' => 1, '![]' => 0, '!+[]' => 1);
-	
-	private static function startsWith($haystack, $needle) {
-		// search backwards starting from haystack length characters from the end
-		return $needle === "" || strrpos($haystack, $needle, -strlen($haystack)) !== false;
-	}
 
+	/**
+	* Translates obfuscated javascript to a number.
+	*
+	* @param $input The javascript obfuscated input.
+	*/
 	public static function unfuckCode($input) {
 		if ($input == NULL || trim($input) == '')
 			return 0;

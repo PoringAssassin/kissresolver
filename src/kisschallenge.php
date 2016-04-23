@@ -2,6 +2,9 @@
 
 require_once('jsfuck.php');
 
+/**
+* Data conainer for additional challenge data.
+*/
 class ChallengeData {
 	public $challengePath;
 	public $hash;
@@ -9,13 +12,23 @@ class ChallengeData {
 	public $script;
 }
 
+/**
+* Helper class for kissanime's challenge.
+*/
 class KissChallenge {
+	/** The regex for getting the action url */
 	const CHALLENGEFORMACTIONREGEX = '#<form id="challenge-form" action="(?P<action>[^"]+)" method="(?P<method>[^"]+)">#i';
+	
+	/** The regex for getting the jschl_vc value */
 	const CHALLENGEFORMHASHREGEX = '#<input type="hidden" name="jschl_vc" value="(?P<value>[^"]+)"/>#i';
+	
+	/** The regex for getting the pass value */
 	const CHALLENGEFORMPASSREGEX = '#<input type="hidden" name="pass" value="(?P<value>[^"]+)"/>#i';
+	
+	/** The regex for getting the script content */
 	const CHALLENGEFORMJAVASCRIPTREGEX = '#setTimeout\(function\(\)\{(?P<script>.*?)\}, 4000\);#si';
 
-	protected $baseurl;
+	/** The saved data from the challenge */
 	protected $data;
 
 	function __construct($response, $baseurl) {
@@ -35,20 +48,24 @@ class KissChallenge {
 		
 		preg_match(self::CHALLENGEFORMJAVASCRIPTREGEX, $response, $matches);
 		$this->data->script = trim($matches['script']);
-		
-		$this->baseurl = $baseurl;
 	}
 
+	/**
+	* Gets the path to post the answer to the challenge.
+	*/
 	public function getResponsePath() {
-		$host = $this->baseurl;
-		
 		return $this->data->challengePath . '?jschl_vc=' . 
 				urlencode($this->data->hash) . '&pass=' .
 				urlencode($this->data->pass) . '&jschl_answer=' .
-				self::calculateAnswer($this->data->script, $host);
+				self::calculateAnswer($this->data->script);
 	}
 
-	protected static function calculateAnswer($script, $baseUrl) {
+	/**
+	* Calculates the magic number based on the supplied javascript.
+	*
+	* @param $script The javascript.
+	*/
+	protected static function calculateAnswer($script) {
 		$urlLength = strlen('kissanime.to'); // le magic.
 		
 		$matches = null;

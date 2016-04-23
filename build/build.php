@@ -17,4 +17,6 @@ $phar->setStub($phar->createDefaultStub('bootstrap.php'));
 
 copy($libRoot . '/httpful.phar', $buildRoot . '/httpful.phar');
 
+echo 'Build completed.';
+
 ?>
